@@ -11,6 +11,7 @@ using System.Net.Sockets;
 using System.Threading;
 using SMBLibrary.Authentication.GSSAPI;
 using SMBLibrary.NetBios;
+using SMBLibrary.Services;
 using SMBLibrary.SMB1;
 using SMBLibrary.SMB2;
 using Utilities;
@@ -25,7 +26,7 @@ namespace SMBLibrary.Server
         public static readonly bool EnableExtendedSecurity = true;
         private static readonly int InactivityMonitoringInterval = 30000; // Check every 30 seconds
 
-        private SMBShareCollection m_shares; // e.g. Shared folders
+        private volatile SMBShareCollection m_shares; // e.g. Shared folders
         private GSSProvider m_securityProvider;
         private NamedPipeShare m_services; // Named pipes
         private Guid m_serverGuid;
@@ -55,6 +56,69 @@ namespace SMBLibrary.Server
             m_services = new NamedPipeShare(shares.ListShares());
             m_serverGuid = Guid.NewGuid();
             m_connectionManager = new ConnectionManager();
+        }
+
+        public SMBServer(SMBShareCollection shares, GSSProvider securityProvider, ShareListProvider shareListProvider)
+        {
+            m_shares = shares;
+            m_securityProvider = securityProvider;
+            m_services = new NamedPipeShare(shareListProvider);
+            m_serverGuid = Guid.NewGuid();
+            m_connectionManager = new ConnectionManager();
+        }
+
+        private readonly object _sharesLock = new object();
+
+        /// <summary>
+        /// Adds a share at runtime without stopping the server.
+        /// Existing connections are not affected.
+        /// </summary>
+        public void AddShare(FileSystemShare share)
+        {
+            lock (_sharesLock)
+            {
+                if (m_shares.Contains(share.Name, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                SMBShareCollection updated = new SMBShareCollection();
+                updated.AddRange(m_shares);
+                updated.Add(share);
+                m_shares = updated;
+            }
+        }
+
+        /// <summary>
+        /// Removes a share at runtime. Active tree connections to this share
+        /// remain functional until disconnected — only new connections are blocked.
+        /// </summary>
+        public bool RemoveShare(string shareName)
+        {
+            lock (_sharesLock)
+            {
+                int index = m_shares.IndexOf(shareName, StringComparison.OrdinalIgnoreCase);
+                if (index < 0)
+                    return false;
+
+                SMBShareCollection updated = new SMBShareCollection();
+                for (int i = 0; i < m_shares.Count; i++)
+                {
+                    if (i != index)
+                        updated.Add(m_shares[i]);
+                }
+                m_shares = updated;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Replaces the entire share collection atomically.
+        /// </summary>
+        public void SetShares(SMBShareCollection shares)
+        {
+            lock (_sharesLock)
+            {
+                m_shares = shares;
+            }
         }
 
         public void Start(IPAddress serverAddress, SMBTransportType transport)

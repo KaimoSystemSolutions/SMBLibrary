@@ -27,6 +27,14 @@ namespace SMBLibrary.Server
             m_store = new NamedPipeStore(services);
         }
 
+        public NamedPipeShare(ShareListProvider shareListProvider)
+        {
+            List<RemoteService> services = new List<RemoteService>();
+            services.Add(new ServerService(Environment.MachineName, shareListProvider));
+            services.Add(new WorkstationService(Environment.MachineName, Environment.MachineName));
+            m_store = new NamedPipeStore(services);
+        }
+
         public string Name
         {
             get

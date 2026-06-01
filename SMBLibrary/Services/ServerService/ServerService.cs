@@ -9,6 +9,8 @@ using System.Collections.Generic;
 
 namespace SMBLibrary.Services
 {
+    public delegate List<string> ShareListProvider();
+
     /// <summary>
     /// [MS-SRVS]
     /// </summary>
@@ -27,6 +29,7 @@ namespace SMBLibrary.Services
         private ServerType m_serverType;
 
         private List<string> m_shares;
+        private ShareListProvider m_sharesProvider;
 
         public ServerService(string serverName, List<string> shares)
         {
@@ -37,6 +40,17 @@ namespace SMBLibrary.Services
             m_serverType = ServerType.Workstation | ServerType.Server | ServerType.WindowsNT | ServerType.ServerNT | ServerType.MasterBrowser;
 
             m_shares = shares;
+        }
+
+        public ServerService(string serverName, ShareListProvider sharesProvider)
+        {
+            m_platformID = PlatformName.NT;
+            m_serverName = serverName;
+            m_verMajor = 5;
+            m_verMinor = 2;
+            m_serverType = ServerType.Workstation | ServerType.Server | ServerType.WindowsNT | ServerType.ServerNT | ServerType.MasterBrowser;
+
+            m_sharesProvider = sharesProvider;
         }
 
         public override byte[] GetResponseBytes(ushort opNum, byte[] requestBytes)
@@ -90,27 +104,27 @@ namespace SMBLibrary.Services
             {
                 case 0:
                     {
-                        // We ignore request.PreferedMaximumLength
+                        List<string> shares = GetCurrentShares();
                         ShareInfo0Container info = new ShareInfo0Container();
-                        foreach (string shareName in m_shares)
+                        foreach (string shareName in shares)
                         {
                             info.Add(new ShareInfo0Entry(shareName));
                         }
                         response.InfoStruct = new ShareEnum(info);
-                        response.TotalEntries = (uint)m_shares.Count;
+                        response.TotalEntries = (uint)shares.Count;
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
                 case 1:
                     {
-                        // We ignore request.PreferedMaximumLength
+                        List<string> shares = GetCurrentShares();
                         ShareInfo1Container info = new ShareInfo1Container();
-                        foreach (string shareName in m_shares)
+                        foreach (string shareName in shares)
                         {
                             info.Add(new ShareInfo1Entry(shareName, new ShareTypeExtended(ShareType.DiskDrive)));
                         }
                         response.InfoStruct = new ShareEnum(info);
-                        response.TotalEntries = (uint)m_shares.Count;
+                        response.TotalEntries = (uint)shares.Count;
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
@@ -134,8 +148,17 @@ namespace SMBLibrary.Services
 
         public NetrShareGetInfoResponse GetNetrShareGetInfoResponse(NetrShareGetInfoRequest request)
         {
-            int shareIndex = IndexOfShare(request.NetName);
-            
+            List<string> shares = GetCurrentShares();
+            int shareIndex = -1;
+            for (int i = 0; i < shares.Count; i++)
+            {
+                if (shares[i].Equals(request.NetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    shareIndex = i;
+                    break;
+                }
+            }
+
             NetrShareGetInfoResponse response = new NetrShareGetInfoResponse();
             if (shareIndex == -1)
             {
@@ -230,11 +253,19 @@ namespace SMBLibrary.Services
             }
         }
 
+        private List<string> GetCurrentShares()
+        {
+            if (m_sharesProvider != null)
+                return m_sharesProvider();
+            return m_shares;
+        }
+
         private int IndexOfShare(string shareName)
         {
-            for (int index = 0; index < m_shares.Count; index++)
+            List<string> shares = GetCurrentShares();
+            for (int index = 0; index < shares.Count; index++)
             {
-                if (m_shares[index].Equals(shareName, StringComparison.OrdinalIgnoreCase))
+                if (shares[index].Equals(shareName, StringComparison.OrdinalIgnoreCase))
                 {
                     return index;
                 }
