@@ -133,6 +133,9 @@ namespace SMBLibrary.Server
                     return new ErrorResponse(command.CommandName, NTStatus.STATUS_USER_SESSION_DELETED);
                 }
 
+                if (OnBeforeCommand != null)
+                    OnBeforeCommand(session.UserName);
+
                 if (command is TreeConnectRequest)
                 {
                     return TreeConnectHelper.GetTreeConnectResponse((TreeConnectRequest)command, state, m_services, m_shares);

@@ -142,6 +142,9 @@ namespace SMBLibrary.Server
                     return new ErrorResponse(command.CommandName);
                 }
 
+                if (OnBeforeCommand != null)
+                    OnBeforeCommand(session.UserName);
+
                 if (command is TreeConnectAndXRequest)
                 {
                     return TreeConnectHelper.GetTreeConnectResponse(header, (TreeConnectAndXRequest)command, state, m_services, m_shares);

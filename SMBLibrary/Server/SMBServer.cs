@@ -48,6 +48,9 @@ namespace SMBLibrary.Server
 
         public event EventHandler<ConnectionRequestEventArgs> ConnectionRequested;
         public event EventHandler<LogEntry> LogEntryAdded;
+        public delegate void BeforeCommandHandler(string userName);
+
+        public BeforeCommandHandler OnBeforeCommand { get; set; }
 
         public SMBServer(SMBShareCollection shares, GSSProvider securityProvider)
         {
