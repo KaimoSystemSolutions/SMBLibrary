@@ -1,3 +1,6 @@
+This is a Fork of the original SMBLibrary project, which can be found at https://www.nuget.org/packages/SMBLibrary
+The fork is mainly caused for the implementation of dynamic Share handling and auth possibilities, to check who can see a share.
+
 About SMBLibrary:
 =================
 SMBLibrary is an open-source C# SMB 1.0/CIFS, SMB 2.0, SMB 2.1 and SMB 3.0 server and client implementation.  
