@@ -83,7 +83,7 @@ namespace SMBLibrary.Services
         {
             NetrShareEnumRequest request;
             NetrShareEnumResponse response = new NetrShareEnumResponse();
-            try 
+            try
             {
                 request = new NetrShareEnumRequest(requestBytes);
             }
@@ -99,7 +99,7 @@ namespace SMBLibrary.Services
                 response.Result = Win32Error.ERROR_INVALID_LEVEL;
                 return response;
             }
-            
+
             switch (request.InfoStruct.Level)
             {
                 case 0:
@@ -171,21 +171,24 @@ namespace SMBLibrary.Services
             {
                 case 0:
                     {
-                        ShareInfo0Entry info = new ShareInfo0Entry(m_shares[shareIndex]);
+                        // FIX: was m_shares[shareIndex] — m_shares is null when using ShareListProvider
+                        ShareInfo0Entry info = new ShareInfo0Entry(shares[shareIndex]);
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
                 case 1:
                     {
-                        ShareInfo1Entry info = new ShareInfo1Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
+                        // FIX: was m_shares[shareIndex]
+                        ShareInfo1Entry info = new ShareInfo1Entry(shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
                     }
                 case 2:
                     {
-                        ShareInfo2Entry info = new ShareInfo2Entry(m_shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
+                        // FIX: was m_shares[shareIndex]
+                        ShareInfo2Entry info = new ShareInfo2Entry(shares[shareIndex], new ShareTypeExtended(ShareType.DiskDrive));
                         response.InfoStruct = new ShareInfo(info);
                         response.Result = Win32Error.ERROR_SUCCESS;
                         return response;
