@@ -14,16 +14,23 @@ namespace SMBLibrary.Services
 {
     public abstract class RemoteService
     {
+        /// <summary>
+        /// Legacy entry point — implementations that don't need the caller's
+        /// identity only need to implement this overload.
+        /// </summary>
         public abstract byte[] GetResponseBytes(ushort opNum, byte[] requestBytes);
 
-        public abstract Guid InterfaceGuid
+        /// <summary>
+        /// User-aware entry point. Default forwards to the legacy method,
+        /// so existing implementations continue to work unchanged.
+        /// Override this when the response depends on the caller (e.g. ABE).
+        /// </summary>
+        public virtual byte[] GetResponseBytes(ushort opNum, byte[] requestBytes, string username)
         {
-            get;
+            return GetResponseBytes(opNum, requestBytes);
         }
 
-        public abstract string PipeName
-        {
-            get;
-        }
+        public abstract Guid InterfaceGuid { get; }
+        public abstract string PipeName { get; }
     }
 }

@@ -107,6 +107,7 @@ namespace SMBLibrary.Services
             return -1;
         }
 
+        // Legacy entry — kept so callers that don't have a username keep compiling.
         public static List<RPCPDU> GetRPCResponse(RequestPDU requestPDU, RemoteService service, int maxTransmitFragmentSize)
         {
             List<RPCPDU> result = new List<RPCPDU>();
@@ -151,6 +152,48 @@ namespace SMBLibrary.Services
             }
             while (offset < responseBytes.Length);
             
+            return result;
+        }
+
+        // NEW — preferred entry point.
+        public static List<RPCPDU> GetRPCResponse(
+            RequestPDU requestPDU, RemoteService service, int maxTransmitFragmentSize, string username)
+        {
+            List<RPCPDU> result = new List<RPCPDU>();
+            byte[] responseBytes;
+            try
+            {
+                responseBytes = service.GetResponseBytes(requestPDU.OpNum, requestPDU.Data, username);
+            }
+            catch (UnsupportedOpNumException)
+            {
+                FaultPDU faultPDU = new FaultPDU();
+                faultPDU.Flags = PacketFlags.FirstFragment | PacketFlags.LastFragment | PacketFlags.DidNotExecute;
+                faultPDU.DataRepresentation = requestPDU.DataRepresentation;
+                faultPDU.CallID = requestPDU.CallID;
+                faultPDU.AllocationHint = RPCPDU.CommonFieldsLength + FaultPDU.FaultFieldsLength;
+                faultPDU.Status = FaultStatus.OpRangeError;
+                result.Add(faultPDU);
+                return result;
+            }
+
+            int offset = 0;
+            int maxPDUDataLength = maxTransmitFragmentSize - RPCPDU.CommonFieldsLength - ResponsePDU.ResponseFieldsLength;
+            do
+            {
+                ResponsePDU responsePDU = new ResponsePDU();
+                int pduDataLength = Math.Min(responseBytes.Length - offset, maxPDUDataLength);
+                responsePDU.DataRepresentation = requestPDU.DataRepresentation;
+                responsePDU.CallID = requestPDU.CallID;
+                responsePDU.AllocationHint = (uint)(responseBytes.Length - offset);
+                responsePDU.Data = ByteReader.ReadBytes(responseBytes, offset, pduDataLength);
+                if (offset == 0) responsePDU.Flags |= PacketFlags.FirstFragment;
+                if (offset + pduDataLength == responseBytes.Length) responsePDU.Flags |= PacketFlags.LastFragment;
+                result.Add(responsePDU);
+                offset += pduDataLength;
+            }
+            while (offset < responseBytes.Length);
+
             return result;
         }
     }
