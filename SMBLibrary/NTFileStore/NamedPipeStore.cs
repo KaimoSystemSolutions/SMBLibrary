@@ -32,7 +32,7 @@ namespace SMBLibrary
             {
                 // All instances of a named pipe share the same pipe name, but each instance has its own buffers and handles,
                 // and provides a separate conduit for client/server communication.
-                RPCPipeStream stream = new RPCPipeStream(service);
+                RPCPipeStream stream = new RPCPipeStream(service, securityContext?.UserName);
                 handle = new FileHandle(path, false, stream, false);
                 fileStatus = FileStatus.FILE_OPENED;
                 return NTStatus.STATUS_SUCCESS;

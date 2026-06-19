@@ -14,12 +14,20 @@ namespace SMBLibrary.Services
     public class RPCPipeStream : Stream
     {
         private RemoteService m_service;
-        private List<MemoryStream> m_outputStreams; // A stream for each message in order to support message mode named pipe
+        private List<MemoryStream> m_outputStreams;
         private int? m_maxTransmitFragmentSize;
 
-        public RPCPipeStream(RemoteService service)
+        // NEW — username of the SMB session that owns this pipe instance.
+        // Set by the pipe store at handle creation and stays for the lifetime
+        // of this stream. One stream = one SMB open = one user.
+        private string m_username;
+
+        public RPCPipeStream(RemoteService service) : this(service, null) { }
+
+        public RPCPipeStream(RemoteService service, string username)
         {
             m_service = service;
+            m_username = username;
             m_outputStreams = new List<MemoryStream>();
         }
 
@@ -29,20 +37,14 @@ namespace SMBLibrary.Services
             {
                 int result = m_outputStreams[0].Read(buffer, offset, count);
                 if (m_outputStreams[0].Position == m_outputStreams[0].Length)
-                {
                     m_outputStreams.RemoveAt(0);
-                }
                 return result;
             }
-            else
-            {
-                return 0;
-            }
+            return 0;
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            // [MC-CIFS] In message mode, the system treats the bytes read or written in each I/O operation to the pipe as a message unit.
             RPCPDU rpcRequest = RPCPDU.GetPDU(buffer, offset);
             ProcessRPCRequest(rpcRequest);
         }
@@ -55,19 +57,20 @@ namespace SMBLibrary.Services
                 m_maxTransmitFragmentSize = bindAckPDU.MaxTransmitFragmentSize;
                 Append(bindAckPDU.GetBytes());
             }
-            else if (m_maxTransmitFragmentSize.HasValue && rpcRequest is RequestPDU) // if BindPDU was not received, we treat as protocol error
+            else if (m_maxTransmitFragmentSize.HasValue && rpcRequest is RequestPDU)
             {
-                List<RPCPDU> responsePDUs = RemoteServiceHelper.GetRPCResponse((RequestPDU)rpcRequest, m_service, m_maxTransmitFragmentSize.Value);
+                // CHANGED: pass username down so ABE-aware services get the caller identity.
+                List<RPCPDU> responsePDUs = RemoteServiceHelper.GetRPCResponse(
+                    (RequestPDU)rpcRequest, m_service, m_maxTransmitFragmentSize.Value, m_username);
                 foreach (RPCPDU responsePDU in responsePDUs)
-                {
                     Append(responsePDU.GetBytes());
-                }
             }
             else
             {
                 FaultPDU faultPDU = new FaultPDU();
                 faultPDU.Flags = PacketFlags.FirstFragment | PacketFlags.LastFragment;
-                faultPDU.DataRepresentation = new DataRepresentationFormat(CharacterFormat.ASCII, ByteOrder.LittleEndian, FloatingPointRepresentation.IEEE);
+                faultPDU.DataRepresentation = new DataRepresentationFormat(
+                    CharacterFormat.ASCII, ByteOrder.LittleEndian, FloatingPointRepresentation.IEEE);
                 faultPDU.CallID = 0;
                 faultPDU.AllocationHint = RPCPDU.CommonFieldsLength + FaultPDU.FaultFieldsLength;
                 faultPDU.Status = FaultStatus.ProtocolError;
@@ -77,89 +80,25 @@ namespace SMBLibrary.Services
 
         private void Append(byte[] buffer)
         {
-            MemoryStream stream = new MemoryStream(buffer);
-            m_outputStreams.Add(stream);
+            m_outputStreams.Add(new MemoryStream(buffer));
         }
 
-        public override void Flush()
-        {
-        }
+        public override void Flush() { }
+        public override void Close() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
 
-        public override void Close()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override bool CanSeek
-        {
-            get
-            {
-                return false;
-            }
-        }
-
-        public override bool CanRead
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        public override bool CanWrite
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        public override long Length
-        {
-            get
-            {
-                // Stream.Length only works on Stream implementations where seeking is available.
-                throw new NotSupportedException();
-            }
-        }
-
+        public override bool CanSeek => false;
+        public override bool CanRead => true;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
         public override long Position
         {
-            get
-            {
-                throw new NotSupportedException();
-            }
-            set
-            {
-                throw new NotSupportedException();
-            }
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
         }
 
-        /// <summary>
-        /// The length of the first message available in the pipe
-        /// </summary>
         public int MessageLength
-        {
-            get
-            {
-                if (m_outputStreams.Count > 0)
-                {
-                    return (int)m_outputStreams[0].Length;
-                }
-                else
-                {
-                    return 0;
-                }
-            }
-        }
+            => m_outputStreams.Count > 0 ? (int)m_outputStreams[0].Length : 0;
     }
 }
